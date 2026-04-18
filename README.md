@@ -47,23 +47,27 @@ pip install -r requirements.txt
 
 1. Install Kaggle CLI (one-time):
 
-```bash
-pip install kaggle
-```
+### Option A: Train from UTKFace dataset (recommended)
 
-2. Create a Kaggle account and API token:
-   - Go to Kaggle -> Account -> **Create New API Token**
-   - This downloads `kaggle.json`
-
-3. Place credentials file:
-   - **Linux/macOS:** `~/.kaggle/kaggle.json`
-   - **Windows:** `%USERPROFILE%\\.kaggle\\kaggle.json`
-
-4. Restrict permissions (Linux/macOS):
+1. Download/extract UTKFace into a folder (example: `datasets/UTKFace/`) where image names look like:
+   `25_0_2_20170116174525125.jpg`.
+2. Run:
 
 ```bash
-chmod 600 ~/.kaggle/kaggle.json
+python src/train.py --utkface-root datasets/UTKFace --min-age 0 --max-age 80 --age-bin-size 3 --epochs 10
 ```
+
+This starts with pre-trained ResNet18 weights and fine-tunes the final classification head on UTKFace age bins.
+
+### Option B: Manual webcam data collection
+
+```bash
+python src/train.py --collect-data --min-age 0 --max-age 80 --age-bin-size 3
+```
+
+This creates age-category folders under `data/` such as `0-2`, `3-5`, etc.
+
+> Press `c` to capture images and `q` to stop collection for each age category.
 
 5. Download/prepare UTKFace into `datasets/UTKFace/` with one command:
 
