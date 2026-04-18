@@ -47,18 +47,9 @@ pip install -r requirements.txt
 
 ### Option A: Train from UTKFace dataset (recommended)
 
-1. Download/prepare UTKFace into `datasets/UTKFace/` with one command:
-
-```bash
-python src/download_utkface.py --source kaggle --output-dir datasets/UTKFace
-```
-
-> Requires Kaggle CLI auth. Alternative: use `--source url --url <direct_archive_url>`.
-> Downloaded datasets/archives are ignored by git via `.gitignore` (`datasets/`, archive extensions).
-
-2. The prepared folder will contain image names like:
+1. Download/extract UTKFace into a folder (example: `datasets/UTKFace/`) where image names look like:
    `25_0_2_20170116174525125.jpg`.
-3. Run training:
+2. Run:
 
 ```bash
 python src/train.py --utkface-root datasets/UTKFace --min-age 0 --max-age 80 --age-bin-size 3 --epochs 10
