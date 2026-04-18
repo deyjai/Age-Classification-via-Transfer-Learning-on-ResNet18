@@ -63,7 +63,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run real-time webcam classification")
     parser.add_argument("--model-path", default="model_state.pth")
     parser.add_argument("--camera-index", type=int, default=0)
-    parser.add_argument("--utkface-root", default=None)
+    parser.add_argument("--utkface-root", default="datasets/UTKFace")
     parser.add_argument("--min-age", type=int, default=DEFAULT_MIN_AGE)
     parser.add_argument("--max-age", type=int, default=DEFAULT_MAX_AGE)
     parser.add_argument("--age-bin-size", type=int, default=DEFAULT_BIN_SIZE)
@@ -71,11 +71,6 @@ def parse_args() -> argparse.Namespace:
         "--train-if-missing",
         action="store_true",
         help="Train a model first if checkpoint does not exist.",
-    )
-    parser.add_argument(
-        "--collect-data",
-        action="store_true",
-        help="Used with --train-if-missing to collect webcam data before training.",
     )
     return parser.parse_args()
 
@@ -88,7 +83,6 @@ if __name__ == "__main__":
             print(f"Checkpoint '{args.model_path}' not found. Training a new model...")
             train_model(
                 model_path=args.model_path,
-                collect_data=args.collect_data,
                 utkface_root=args.utkface_root,
                 min_age=args.min_age,
                 max_age=args.max_age,
