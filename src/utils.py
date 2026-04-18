@@ -18,6 +18,51 @@ def ensure_class_directories(data_root: str | Path, class_names: Iterable[str]) 
         (data_root / class_name).mkdir(parents=True, exist_ok=True)
 
 
+def generate_age_bins(min_age: int, max_age: int, bin_size: int = 3) -> list[str]:
+    """Generate age-range class labels with a fixed span.
+
+    Example with min_age=0, max_age=8, bin_size=3:
+        ["0-2", "3-5", "6-8"]
+    """
+    if min_age < 0:
+        raise ValueError("min_age must be >= 0.")
+    if max_age < min_age:
+        raise ValueError("max_age must be greater than or equal to min_age.")
+    if bin_size <= 0:
+        raise ValueError("bin_size must be > 0.")
+
+    bins: list[str] = []
+    start = min_age
+    while start <= max_age:
+        end = min(start + bin_size - 1, max_age)
+        bins.append(f"{start}-{end}")
+        start += bin_size
+
+    return bins
+
+
+def age_to_bin_label(age: int, min_age: int, max_age: int, bin_size: int = 3) -> str | None:
+    """Map a numeric age to an age-bin label (e.g., 7 -> '6-8')."""
+    if age < min_age or age > max_age:
+        return None
+    start = min_age + ((age - min_age) // bin_size) * bin_size
+    end = min(start + bin_size - 1, max_age)
+    return f"{start}-{end}"
+
+
+def parse_utkface_age(filename: str) -> int | None:
+    """Extract age from a UTKFace filename.
+
+    UTKFace files typically follow this pattern:
+        [age]_[gender]_[race]_[date&time].jpg
+    """
+    stem = Path(filename).stem
+    first_token = stem.split("_")[0]
+    if not first_token.isdigit():
+        return None
+    return int(first_token)
+
+
 def collect_data_for_class(
     class_name: str,
     data_root: str | Path = "data",
@@ -121,6 +166,53 @@ def load_dataset_tensors(
         raise ValueError(
             f"No valid images found under '{data_root}'. "
             "Collect data first or verify class directory names."
+        )
+
+    return torch.stack(data), torch.tensor(labels)
+
+
+def load_utkface_tensors(
+    utkface_root: str | Path,
+    class_names: list[str],
+    image_transforms,
+    min_age: int,
+    max_age: int,
+    bin_size: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Load UTKFace images and map ages into configured age bins."""
+    root = Path(utkface_root)
+    if not root.exists():
+        raise FileNotFoundError(f"UTKFace directory not found: {root}")
+
+    class_to_idx = {name: idx for idx, name in enumerate(class_names)}
+    valid_exts = {".jpg", ".jpeg", ".png"}
+
+    data: list[torch.Tensor] = []
+    labels: list[int] = []
+
+    for image_path in sorted(root.iterdir()):
+        if image_path.suffix.lower() not in valid_exts:
+            continue
+
+        age = parse_utkface_age(image_path.name)
+        if age is None:
+            continue
+
+        bin_label = age_to_bin_label(age, min_age=min_age, max_age=max_age, bin_size=bin_size)
+        if bin_label is None or bin_label not in class_to_idx:
+            continue
+
+        img = cv2.imread(str(image_path))
+        if img is None:
+            continue
+
+        data.append(image_transforms(img))
+        labels.append(class_to_idx[bin_label])
+
+    if not data:
+        raise ValueError(
+            f"No valid UTKFace images found under '{root}'. "
+            "Verify dataset path and age range/bin configuration."
         )
 
     return torch.stack(data), torch.tensor(labels)

@@ -5,6 +5,14 @@ __pycache__/
 .env
 venv/
 data/
+datasets/
+datasets/_downloads/
+datasets/UTKFace/
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
 models/
 *.pt
 *.pth
