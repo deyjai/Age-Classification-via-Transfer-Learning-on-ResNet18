@@ -72,11 +72,6 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Train a model first if checkpoint does not exist.",
     )
-    parser.add_argument(
-        "--collect-data",
-        action="store_true",
-        help="Used with --train-if-missing to collect webcam data before training.",
-    )
     return parser.parse_args()
 
 

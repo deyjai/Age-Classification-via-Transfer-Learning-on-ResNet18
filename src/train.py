@@ -35,7 +35,6 @@ def train_model(
     batch_size: int = 4,
     epochs: int = 10,
     lr: float = 1e-3,
-    collect_data: bool = False,
     model_path: str = "model_state.pth",
 ) -> str:
     """Train a transfer-learning ResNet18 classifier and save the checkpoint."""
@@ -124,9 +123,10 @@ def parse_args() -> argparse.Namespace:
         help="Width of each age category in years.",
     )
     parser.add_argument(
-        "--collect-data",
-        action="store_true",
-        help="Collect webcam samples before training.",
+        "--age-bin-size",
+        type=int,
+        default=DEFAULT_BIN_SIZE,
+        help="Width of each age category in years.",
     )
     parser.add_argument("--model-path", default="model_state.pth")
     return parser.parse_args()

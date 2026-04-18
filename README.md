@@ -43,7 +43,9 @@ So if `min_age=0`, `max_age=11`, and `age_bin_size=3`, classes become:
 pip install -r requirements.txt
 ```
 
-## Train
+## 1) Install and Prepare UTKFace
+
+1. Install Kaggle CLI (one-time):
 
 ### Option A: Train from UTKFace dataset (recommended)
 
@@ -67,14 +69,37 @@ This creates age-category folders under `data/` such as `0-2`, `3-5`, etc.
 
 > Press `c` to capture images and `q` to stop collection for each age category.
 
-## Run Inference
+5. Download/prepare UTKFace into `datasets/UTKFace/` with one command:
+
+```bash
+python src/download_utkface.py --source kaggle --output-dir datasets/UTKFace
+```
+
+6. Alternative (if not using Kaggle CLI): use `--source url --url <direct_archive_url>`.
+> Downloaded datasets/archives are ignored by git via `.gitignore` (`datasets/`, archive extensions).
+
+7. The prepared folder will contain image names like:
+   `25_0_2_20170116174525125.jpg`.
+## 2) Train the Model (Transfer Learning on ResNet18)
+
+Run training on the prepared UTKFace folder:
+
+```bash
+python src/train.py --utkface-root datasets/UTKFace --min-age 0 --max-age 80 --age-bin-size 3 --epochs 10
+```
+
+This starts with pre-trained ResNet18 weights and fine-tunes the final classification head on UTKFace age bins.
+
+## 3) Use Webcam for Inference (Classification Only)
 
 ```bash
 python src/webcam.py --model-path model_state.pth
 ```
 
-Or auto-train if the checkpoint is missing:
+If `model_state.pth` is missing, you can auto-train from UTKFace first:
 
 ```bash
 python src/webcam.py --train-if-missing --utkface-root datasets/UTKFace --min-age 0 --max-age 80 --age-bin-size 3
 ```
+
+The webcam mode is inference-only (no data collection).
