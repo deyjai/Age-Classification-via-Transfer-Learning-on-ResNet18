@@ -1,0 +1,30 @@
+"""Model utilities for transfer learning with ResNet18."""
+
+from __future__ import annotations
+
+import torch.nn as nn
+from torchvision.models import ResNet18_Weights, resnet18
+
+
+def create_resnet18_transfer_model(
+    num_classes: int,
+    feature_extract: bool = True,
+):
+    """Create a ResNet18 model configured for transfer learning.
+
+    Args:
+        num_classes: Number of target classes.
+        feature_extract: If True, freeze all backbone parameters and train
+            only the classifier head.
+
+    Returns:
+        A torchvision ResNet18 model with a replaced classification layer.
+    """
+    model = resnet18(weights=ResNet18_Weights.DEFAULT)
+
+    if feature_extract:
+        for param in model.parameters():
+            param.requires_grad = False
+
+    model.fc = nn.Linear(model.fc.in_features, num_classes)
+    return model
