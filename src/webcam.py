@@ -46,56 +46,6 @@ def apply_zoom(frame, zoom_factor: float):
     return cv2.resize(zoomed, (width, height), interpolation=cv2.INTER_LINEAR)
 
 
-def draw_dotted_ellipse(
-    frame,
-    center: tuple[int, int],
-    axes: tuple[int, int],
-    color: tuple[int, int, int],
-    thickness: int = 2,
-    segment_degrees: int = 8,
-    gap_degrees: int = 8,
-) -> None:
-    """Draw a dotted ellipse by alternating short arc segments and gaps."""
-    start_angle = 0
-    while start_angle < 360:
-        end_angle = min(start_angle + segment_degrees, 360)
-        cv2.ellipse(frame, center, axes, 0, start_angle, end_angle, color, thickness)
-        start_angle += segment_degrees + gap_degrees
-
-
-def draw_face_guide(frame) -> None:
-    """Draw a dotted face silhouette guide from forehead-top to chin-bottom."""
-    height, width = frame.shape[:2]
-
-    center_x = width // 2
-    top_y = int(height * 0.16)
-    bottom_y = int(height * 0.84)
-    guide_height = bottom_y - top_y
-    center_y = (top_y + bottom_y) // 2
-
-    # Slightly narrower than a perfect oval to better resemble a face silhouette.
-    axis_x = int(width * 0.17)
-    axis_y = max(guide_height // 2, 1)
-
-    guide_color = (0, 255, 255)
-    draw_dotted_ellipse(
-        frame,
-        center=(center_x, center_y),
-        axes=(axis_x, axis_y),
-        color=guide_color,
-        thickness=2,
-    )
-    cv2.putText(
-        frame,
-        "Align forehead to top, chin to bottom of guide",
-        (max(10, center_x - 240), max(25, top_y - 12)),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.55,
-        guide_color,
-        2,
-    )
-
-
 def run_webcam_inference(
     model_path: str,
     camera_index: int = 0,
@@ -135,7 +85,6 @@ def run_webcam_inference(
             (255, 255, 255),
             2,
         )
-        draw_face_guide(display_frame)
         cv2.imshow("Predictions (press 'q' to quit)", display_frame)
 
         key = cv2.waitKey(1) & 0xFF
