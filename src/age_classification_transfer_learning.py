@@ -1,0 +1,340 @@
+# Assignment: Age Classification with ResNet-18
+import os
+
+import glob
+
+import numpy as np
+
+import matplotlib.pyplot as plt
+
+from PIL import Image
+
+from sklearn.model_selection import train_test_split
+
+from sklearn.metrics import classification_report, confusion_matrix
+
+import seaborn as sns
+
+
+import torch
+
+import torch.nn as nn
+
+import torch.optim as optim
+
+from torch.utils.data import Dataset, DataLoader
+
+from torchvision import models, transforms
+
+
+# here I check if we can use a GPU, otherwise I will use the CPU
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+print("Device is ", DEVICE)
+
+import kagglehub
+
+path = kagglehub.dataset_download("jangedoo/utkface-new")
+
+
+print("Path to dataset file:", path)
+
+DATA_DIR = os.path.join(path, "UTKFace")
+
+IMG_SIZE = 224
+
+BATCH_SIZE = 32
+
+NUM_CLASSES = 5
+
+CLASS_NAMES = ["Child", "Young Adult", "Adult", "Middle-Aged", "Senior"]
+
+AGE_BINS = [0, 13, 26, 46, 66, 200]
+
+
+def get_age_class(age):
+
+    for i in range(len(AGE_BINS) - 1):
+
+        if AGE_BINS[i] <= age < AGE_BINS[i + 1]:
+
+            return i
+
+
+paths, labels = [], []
+
+
+for path in glob.glob(os.path.join(DATA_DIR, "*.jpg")):
+
+    filename = os.path.basename(path)
+
+    try:
+
+        age = int(filename.split("_")[0])
+
+        paths.append(path)
+
+        labels.append(get_age_class(age))
+
+    except:
+
+        pass
+
+
+print(f"Total image loaded: {len(paths)}")
+
+
+for i, name in enumerate(CLASS_NAMES):
+
+    count = labels.count(i)
+
+    print(f"  {name} : {count}")
+
+xtrain, xtemp, ytrain, ytemp = train_test_split(
+    paths, labels, test_size=0.2, stratify=labels, random_state=42
+)
+
+xval, xtest, yval, ytest = train_test_split(
+    xtemp, ytemp, test_size=0.5, stratify=ytemp, random_state=42
+)
+
+
+print(f"Train {len(xtrain)}  |  Valuation: {len(xval)}  |  Test: {len(xtest)}")
+
+train_transform = transforms.Compose(
+    [
+        transforms.Resize((IMG_SIZE, IMG_SIZE)),
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomRotation(15),
+        transforms.ColorJitter(brightness=0.3, contrast=0.3),
+        transforms.ToTensor(),
+        transforms.Normalize(
+            [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]  # ImageNet mean
+        ),  # ImageNet std
+    ]
+)
+
+eval_transform = transforms.Compose(
+    [
+        transforms.Resize((IMG_SIZE, IMG_SIZE)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+    ]
+)
+
+
+class FaceDataset(Dataset):
+
+    def __init__(self, paths, labels, transform):
+
+        self.paths = paths
+
+        self.labels = labels
+
+        self.transform = transform
+
+    def __len__(self):
+
+        return len(self.paths)
+
+    def __getitem__(self, i):
+
+        img = Image.open(self.paths[i]).convert("RGB")
+
+        return self.transform(img), self.labels[i]
+
+
+training_loader = DataLoader(
+    FaceDataset(xtrain, ytrain, train_transform), batch_size=BATCH_SIZE, shuffle=True
+)
+
+valuation_loader = DataLoader(
+    FaceDataset(xval, yval, eval_transform), batch_size=BATCH_SIZE, shuffle=False
+)
+
+test_loader = DataLoader(
+    FaceDataset(xtest, ytest, eval_transform), batch_size=BATCH_SIZE, shuffle=False
+)
+
+
+print("Datasets and loaders ready.")
+
+# %%
+model = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
+
+for param in model.parameters():
+
+    param.requires_grad = False
+
+model.fc = nn.Sequential(nn.Dropout(0.5), nn.Linear(512, NUM_CLASSES))
+
+
+model = model.to(DEVICE)
+
+print("Model ready.")
+
+criterion = nn.CrossEntropyLoss()
+
+optimizer = optim.Adam(model.fc.parameters(), lr=1e-3)
+
+
+def train_epoch(model, loader):
+
+    model.train()
+
+    total_loss, correct, total = 0, 0, 0
+
+    for imgs, lbls in loader:
+
+        imgs, lbls = imgs.to(DEVICE), lbls.to(DEVICE)
+
+        optimizer.zero_grad()
+
+        out = model(imgs)
+
+        loss = criterion(out, lbls)
+
+        loss.backward()
+
+        optimizer.step()
+
+        total_loss += loss.item() * len(lbls)
+
+        correct += (out.argmax(1) == lbls).sum().item()
+
+        total += len(lbls)
+
+    return total_loss / total, correct / total
+
+
+@torch.no_grad()
+def eval_epoch(model, loader):
+
+    model.eval()
+
+    total_loss, correct, total = 0, 0, 0
+
+    for imgs, lbls in loader:
+
+        imgs, lbls = imgs.to(DEVICE), lbls.to(DEVICE)
+
+        out = model(imgs)
+
+        loss = criterion(out, lbls)
+
+        total_loss += loss.item() * len(lbls)
+
+        correct += (out.argmax(1) == lbls).sum().item()
+
+        total += len(lbls)
+
+    return total_loss / total, correct / total
+
+
+print("Phase 1: training head only")
+
+for epoch in range(1, 6):
+
+    t_loss, t_acc = train_epoch(model, training_loader)
+
+    v_loss, v_acc = eval_epoch(model, valuation_loader)
+
+    print(
+        f"Epoch {epoch}/5  train_loss={t_loss:.3f}  train_acc={t_acc:.3f}  val_acc={v_acc:.3f}"
+    )
+
+
+for param in model.parameters():
+
+    param.requires_grad = True
+
+
+optimizer = optim.Adam(model.parameters(), lr=1e-4)
+
+scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.1)
+
+
+history = {"train_acc": [], "val_acc": []}
+
+
+print("Phase 2: fine-tuning all layers")
+
+for epoch in range(1, 21):
+
+    t_loss, t_acc = train_epoch(model, training_loader)
+
+    v_loss, v_acc = eval_epoch(model, valuation_loader)
+
+    scheduler.step()
+
+    history["train_acc"].append(t_acc)
+
+    history["val_acc"].append(v_acc)
+
+    print(
+        f"Epoch {epoch:02d}/20  train_loss={t_loss:.3f}  train_acc={t_acc:.3f}  val_acc={v_acc:.3f}"
+    )
+
+
+torch.save(model.state_dict(), "resnet18_age.pth")
+
+print("Model saved.")
+
+# %%
+plt.plot(history["train_acc"], label="Train Accuracy")
+
+plt.plot(history["val_acc"], label="Val Accuracy")
+
+plt.xlabel("Epoch")
+
+plt.ylabel("Accuracy")
+
+plt.title("Phase 2 Training Curves")
+
+plt.legend()
+
+plt.show()
+
+_, test_acc = eval_epoch(model, test_loader)
+
+print(f"Test Accuracy: {test_acc * 100:.2f}%")
+
+
+all_preds, all_labels = [], []
+
+model.eval()
+
+with torch.no_grad():
+
+    for imgs, lbls in test_loader:
+
+        preds = model(imgs.to(DEVICE)).argmax(1).cpu().numpy()
+
+        all_preds.extend(preds)
+
+        all_labels.extend(lbls.numpy())
+
+
+print(classification_report(all_labels, all_preds, target_names=CLASS_NAMES))
+cm = confusion_matrix(all_labels, all_preds)
+
+sns.heatmap(
+    cm,
+    annot=True,
+    fmt="d",
+    cmap="Blues",
+    xticklabels=CLASS_NAMES,
+    yticklabels=CLASS_NAMES,
+)
+
+plt.xlabel("Predicted")
+
+plt.ylabel("True")
+
+plt.title("Confusion Matrix")
+
+plt.xticks(rotation=20)
+
+plt.tight_layout()
+
+plt.show()
