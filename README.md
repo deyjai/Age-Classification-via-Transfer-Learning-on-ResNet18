@@ -135,6 +135,8 @@ This initializes ResNet18 with pre-trained weights and fine-tunes the classifier
 python src/webcam.py --model-path model_state.pth
 ```
 
+During webcam mode, press `+` to zoom in and `-` to zoom out.
+
 If `model_state.pth` is missing, you can auto-train first:
 
 ```bash
