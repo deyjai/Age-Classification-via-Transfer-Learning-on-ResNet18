@@ -1,0 +1,82 @@
+"""Single-image age-range inference with a trained ResNet18 checkpoint."""
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+from tkinter import Tk, filedialog
+
+import cv2
+import torch
+
+from webcam import load_model
+from utils import get_transforms, prediction_to_label
+
+
+def prompt_for_image_file() -> str | None:
+    """Open a file picker and return a selected image path."""
+    try:
+        root = Tk()
+        root.withdraw()
+        root.update()
+        image_path = filedialog.askopenfilename(
+            title="Select an image for age-range prediction",
+            filetypes=[
+                ("Image files", "*.jpg *.jpeg *.png *.bmp *.webp"),
+                ("All files", "*.*"),
+            ],
+        )
+        root.destroy()
+        return image_path or None
+    except Exception:
+        return None
+
+
+def run_image_inference(model_path: str, image_path: str) -> str:
+    """Run model inference for a single image and return the predicted label."""
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model, class_names = load_model(model_path, device)
+    transforms = get_transforms(train=False)
+
+    image = cv2.imread(image_path)
+    if image is None:
+        raise ValueError(f"Unable to read image file: {image_path}")
+
+    input_img = transforms(image).unsqueeze(0).to(device)
+
+    with torch.no_grad():
+        output = model(input_img)
+        pred_idx = torch.argmax(output, dim=1).item()
+
+    return prediction_to_label(pred_idx, class_names)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Predict age range for a selected image")
+    parser.add_argument("--model-path", default="model_state.pth")
+    parser.add_argument(
+        "--image-path",
+        default=None,
+        help="Optional image path. If omitted, a file picker prompt will open.",
+    )
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    args = parse_args()
+
+    if not Path(args.model_path).exists():
+        raise FileNotFoundError(
+            f"Checkpoint '{args.model_path}' not found. "
+            "Run `python src/train.py` first or pass a valid --model-path."
+        )
+
+    selected_image = args.image_path or prompt_for_image_file()
+    if not selected_image:
+        selected_image = input("No file selected from prompt. Enter image path: ").strip()
+
+    if not selected_image:
+        raise ValueError("No image path provided.")
+
+    prediction = run_image_inference(args.model_path, selected_image)
+    print(f"Predicted age range: {prediction}")
