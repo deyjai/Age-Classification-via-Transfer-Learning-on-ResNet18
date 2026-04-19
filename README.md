@@ -142,3 +142,11 @@ python src/webcam.py --train-if-missing --utkface-root datasets/UTKFace --min-ag
 ```
 
 The webcam mode is inference-only.
+
+## 4) Single-image inference (file picker)
+
+```bash
+python src/predict_image.py --model-path model_state.pth
+```
+
+The script prompts you to select an image file and prints the predicted age range.
