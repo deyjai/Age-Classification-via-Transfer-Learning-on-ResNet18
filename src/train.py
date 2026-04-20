@@ -27,21 +27,7 @@ def _to_float(value: float) -> float:
     return float(value)
 
 
-def apply_bin_tolerance(y_true: list[int], y_pred: list[int], tolerance_bins: int) -> list[int]:
-    """Treat near-bin predictions as correct by snapping them to ground truth within tolerance."""
-    if tolerance_bins <= 0:
-        return y_pred
-
-    adjusted_preds: list[int] = []
-    for truth, pred in zip(y_true, y_pred):
-        if abs(pred - truth) <= tolerance_bins:
-            adjusted_preds.append(truth)
-        else:
-            adjusted_preds.append(pred)
-    return adjusted_preds
-
-
-def evaluate_model(model, dataloader, device, class_names, tolerance_bins: int = 0):
+def evaluate_model(model, dataloader, device, class_names):
     """Evaluate classifier and return loss + metrics for one dataloader."""
     criterion = nn.CrossEntropyLoss()
 
@@ -65,11 +51,9 @@ def evaluate_model(model, dataloader, device, class_names, tolerance_bins: int =
 
     avg_loss = total_loss / len(dataloader)
 
-    effective_preds = apply_bin_tolerance(all_targets, all_preds, tolerance_bins=tolerance_bins)
-
     report = classification_report(
         all_targets,
-        effective_preds,
+        all_preds,
         target_names=class_names,
         labels=list(range(len(class_names))),
         output_dict=True,
@@ -87,8 +71,6 @@ def evaluate_model(model, dataloader, device, class_names, tolerance_bins: int =
         "weighted_f1": _to_float(report["weighted avg"]["f1-score"]),
         "y_true": all_targets,
         "y_pred": all_preds,
-        "y_pred_effective": effective_preds,
-        "tolerance_bins": tolerance_bins,
     }
 
     return metrics
@@ -278,12 +260,8 @@ def train_model(
     seed: int = 42,
     metrics_dir: str = "artifacts/metrics",
     eval_only: bool = False,
-    tolerance_bins: int = 0,
 ) -> str:
     """Train a transfer-learning ResNet18 classifier and save model + metric artifacts."""
-    if tolerance_bins < 0:
-        raise ValueError("tolerance_bins must be >= 0.")
-
     class_names = class_names or generate_age_bins(
         min_age=min_age,
         max_age=max_age,
@@ -360,13 +338,7 @@ def train_model(
 
             avg_train_loss = running_loss / len(train_loader)
 
-            val_metrics = evaluate_model(
-                model,
-                val_loader,
-                device,
-                class_names,
-                tolerance_bins=tolerance_bins,
-            )
+            val_metrics = evaluate_model(model, val_loader, device, class_names)
 
             history_row = {
                 "epoch": epoch + 1,
@@ -401,20 +373,8 @@ def train_model(
 
         model.load_state_dict(best_state_dict)
 
-    final_val_metrics = evaluate_model(
-        model,
-        val_loader,
-        device,
-        class_names,
-        tolerance_bins=tolerance_bins,
-    )
-    test_metrics = evaluate_model(
-        model,
-        test_loader,
-        device,
-        class_names,
-        tolerance_bins=tolerance_bins,
-    )
+    final_val_metrics = evaluate_model(model, val_loader, device, class_names)
+    test_metrics = evaluate_model(model, test_loader, device, class_names)
 
     metrics_dir_path = Path(metrics_dir)
     if history:
@@ -422,13 +382,10 @@ def train_model(
         plot_training_curves(history, metrics_dir_path / "training_curves.png")
     save_confusion_matrix(
         test_metrics["y_true"],
-        test_metrics["y_pred_effective"],
+        test_metrics["y_pred"],
         class_names,
         metrics_dir_path / "test_confusion_matrix.png",
-        title=(
-            "Normalized Confusion Matrix (Test, "
-            f"tolerance={tolerance_bins} bin{'s' if tolerance_bins != 1 else ''})"
-        ),
+        title="Normalized Confusion Matrix (Test)",
     )
 
     print_metrics_table(final_val_metrics, split_name="Validation")
@@ -442,12 +399,10 @@ def train_model(
                 "val_metrics": {
                     key: value
                     for key, value in final_val_metrics.items()
-                    if key not in {"y_true", "y_pred", "y_pred_effective"}
+                    if key not in {"y_true", "y_pred"}
                 },
                 "test_metrics": {
-                    key: value
-                    for key, value in test_metrics.items()
-                    if key not in {"y_true", "y_pred", "y_pred_effective"}
+                    key: value for key, value in test_metrics.items() if key not in {"y_true", "y_pred"}
                 },
                 "metrics_dir": str(metrics_dir_path),
             },
@@ -489,15 +444,6 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip training and only evaluate a saved checkpoint on val/test splits.",
     )
-    parser.add_argument(
-        "--tolerance-bins",
-        type=int,
-        default=0,
-        help=(
-            "Treat predictions within +/- N neighboring age bins as correct for metrics. "
-            "Use 1 to count left/right adjacent bins as correct."
-        ),
-    )
     parser.add_argument("--model-path", default="model_state.pth")
     return parser.parse_args()
 
@@ -517,6 +463,5 @@ if __name__ == "__main__":
         seed=args.seed,
         metrics_dir=args.metrics_dir,
         eval_only=args.eval_only,
-        tolerance_bins=args.tolerance_bins,
         model_path=args.model_path,
     )
