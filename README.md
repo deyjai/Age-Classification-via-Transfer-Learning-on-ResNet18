@@ -194,6 +194,21 @@ python src/train.py \
 
 In `--eval-only` mode, the script loads `model_state.pth`, computes validation/test metrics, prints metric tables, and writes artifacts to `artifacts/metrics` (or your custom `--metrics-dir`).
 
+If you want a prediction to count as correct when it lands in a neighboring bin (for 3-year bins, e.g., predicted `21-23` and truth is `18-20` or `24-26`), use:
+
+```bash
+python src/train.py \
+  --utkface-root datasets/UTKFace \
+  --model-path model_state.pth \
+  --eval-only \
+  --tolerance-bins 1
+```
+
+`--tolerance-bins 1` means a 3-bin acceptance span (left neighbor, exact bin, right neighbor). Set `--tolerance-bins 0` for strict exact-bin metrics.
+
+> Note: if you configured a different `--age-bin-size`, the tolerance still applies in **bin units** (not years).  
+> Example: `--age-bin-size 5 --tolerance-bins 1` accepts ±1 neighboring 5-year bin.
+
 You can customize split/output settings:
 
 ```bash
