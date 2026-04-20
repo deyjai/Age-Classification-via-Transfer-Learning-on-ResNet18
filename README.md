@@ -38,6 +38,54 @@ Starting from pre-trained `resnet18`, the model is adapted as follows:
 Example: if `min_age=0`, `max_age=11`, and `age_bin_size=3`, classes become:
 `0-2`, `3-5`, `6-8`, `9-11`.
 
+
+## Model evaluation metrics (what to report and why)
+
+Because this is a **multi-class age-bin classification** problem, evaluate on a held-out validation/test set with the following metrics:
+
+1. **Accuracy**
+   - Definition: fraction of predictions where the predicted age bin equals the true age bin.
+   - Why it matters: gives a simple overall performance number and is easy to compare across experiments.
+   - Limitation: can be misleading when some age bins have many more samples than others.
+
+2. **Precision (macro + weighted)**
+   - Definition (per class): `TP / (TP + FP)` for each age bin.
+   - Macro precision: unweighted average across bins.
+   - Weighted precision: average weighted by bin support.
+   - Why it matters: tells you how often a predicted bin is correct, which is useful if false positives in specific age groups are costly.
+
+3. **Recall (macro + weighted)**
+   - Definition (per class): `TP / (TP + FN)` for each age bin.
+   - Macro recall: unweighted average across bins.
+   - Weighted recall: average weighted by bin support.
+   - Why it matters: shows whether the model is missing certain age groups (e.g., under-represented bins). High recall means fewer missed true instances of each group.
+
+4. **F1 score (macro + weighted)**
+   - Definition: harmonic mean of precision and recall.
+   - Macro F1: treats all bins equally.
+   - Weighted F1: reflects dataset frequency.
+   - Why it matters: balances false positives and false negatives, making it a strong single summary metric when class imbalance exists.
+
+5. **Confusion matrix**
+   - Definition: table of true bins vs predicted bins.
+   - Why it matters: especially important for age estimation, because errors are ordinal. It reveals whether mistakes are mostly between neighboring bins (acceptable in many use cases) versus far-apart bins (more problematic).
+
+### Recommended reporting set for this project
+
+At minimum, report:
+
+- Top-1 Accuracy
+- Macro Precision, Macro Recall, Macro F1
+- Weighted Precision, Weighted Recall, Weighted F1
+- Confusion Matrix (with class labels like `0-2`, `3-5`, `6-8`, ...)
+
+This combination gives:
+
+- a global headline number (**accuracy**),
+- fairness across age groups (**macro metrics**),
+- population-level realism (**weighted metrics**), and
+- interpretable error structure (**confusion matrix**).
+
 ## Setup
 
 Install project dependencies:
@@ -128,6 +176,45 @@ python src/train.py --utkface-root datasets/UTKFace --min-age 0 --max-age 80 --a
 ```
 
 This initializes ResNet18 with pre-trained weights and fine-tunes the classifier head for configured age bins.
+
+During training, the script now computes and logs validation metrics every epoch, then evaluates both validation and test splits at the end. It writes:
+
+- `artifacts/metrics/training_history.csv` (table with epoch-by-epoch train/validation metrics)
+- `artifacts/metrics/training_curves.png` (loss, validation accuracy, and validation F1 plots)
+- `artifacts/metrics/test_confusion_matrix.png` (normalized test confusion matrix heatmap)
+
+No retraining is required if you already have a checkpoint and only want metrics. Run evaluation-only mode:
+
+```bash
+python src/train.py \
+  --utkface-root datasets/UTKFace \
+  --model-path model_state.pth \
+  --eval-only
+```
+
+In `--eval-only` mode, the script loads `model_state.pth`, computes validation/test metrics, prints metric tables, and writes artifacts to `artifacts/metrics` (or your custom `--metrics-dir`).
+
+If you want a prediction to count as correct when it lands in a neighboring bin (e.g., predicted `21-23` and truth is `18-20` or `24-26`), use:
+
+```bash
+python src/train.py \
+  --utkface-root datasets/UTKFace \
+  --model-path model_state.pth \
+  --eval-only \
+  --tolerance-bins 1
+```
+
+`--tolerance-bins 1` means a 3-bin acceptance span (left neighbor, exact bin, right neighbor). Set `--tolerance-bins 0` for strict exact-bin metrics.
+
+You can customize split/output settings:
+
+```bash
+python src/train.py \
+  --utkface-root datasets/UTKFace \
+  --val-split 0.15 \
+  --test-split 0.15 \
+  --metrics-dir artifacts/metrics
+```
 
 ## 3) Webcam inference
 
